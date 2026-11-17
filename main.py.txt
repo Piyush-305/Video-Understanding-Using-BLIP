@@ -1,0 +1,223 @@
+
+import cv2
+import numpy as np
+import os
+from PIL import Image
+import torch
+from transformers import BlipProcessor, BlipForConditionalGeneration
+
+# -------------------------------
+# Load BLIP Model
+# -------------------------------
+print("Loading BLIP model...")
+
+MODEL_NAME = "Salesforce/blip-image-captioning-base"
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+processor = BlipProcessor.from_pretrained(MODEL_NAME)
+model = BlipForConditionalGeneration.from_pretrained(MODEL_NAME)
+model.to(device)
+model.eval()
+
+print("Model loaded successfully!")
+print("Device:", device)
+
+
+# -------------------------------
+# Video Processor
+# -------------------------------
+class VideoProcessor:
+
+    def __init__(self, num_frames=4, resize_to=224):
+        self.num_frames = num_frames
+        self.resize_to = resize_to
+
+    def load_video(self, video_path):
+
+        cap = cv2.VideoCapture(video_path)
+
+        if not cap.isOpened():
+            raise ValueError("Unable to open video: " + video_path)
+
+        frames = []
+
+        try:
+            while True:
+                ret, frame = cap.read()
+
+                if not ret:
+                    break
+
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                image = Image.fromarray(frame)
+
+                image = image.resize(
+                    (self.resize_to, self.resize_to)
+                )
+
+                frames.append(image)
+
+        finally:
+            cap.release()
+
+        if not frames:
+            raise ValueError("No frames found in video!")
+
+        return frames
+
+    def sample_frames(self, frames):
+
+        if len(frames) <= self.num_frames:
+            return frames
+
+        indices = np.linspace(
+            0, len(frames) - 1,
+            self.num_frames,
+            dtype=int
+        )
+
+        return [frames[i] for i in indices]
+
+    def create_temporal_grid(self, frames):
+
+        if not frames:
+            raise ValueError("No frames available for grid!")
+
+        w, h = frames[0].size
+
+        grid_size = int(np.ceil(np.sqrt(len(frames))))
+
+        grid_image = Image.new(
+            "RGB",
+            (w * grid_size, h * grid_size)
+        )
+
+        for idx, frame in enumerate(frames):
+
+            row = idx // grid_size
+            col = idx % grid_size
+
+            grid_image.paste(
+                frame,
+                (col * w, row * h)
+            )
+
+        return grid_image
+
+
+# -------------------------------
+# Caption Generation
+# -------------------------------
+def generate_caption(image):
+
+    inputs = processor(
+        images=image,
+        return_tensors="pt"
+    ).to(device)
+
+    with torch.no_grad():
+
+        output = model.generate(
+            **inputs,
+            max_new_tokens=50,
+            do_sample=False
+        )
+
+    caption = processor.decode(
+        output[0],
+        skip_special_tokens=True
+    )
+
+    return caption
+
+
+# -------------------------------
+# Synthetic Video Generation
+# -------------------------------
+def generate_sample_video(filename="sample_video.avi"):
+
+    if os.path.exists(filename):
+        return filename
+
+    height, width = 320, 320
+
+    fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+
+    out = cv2.VideoWriter(
+        filename,
+        fourcc,
+        10.0,
+        (width, height)
+    )
+
+    if not out.isOpened():
+        raise RuntimeError("Unable to create video!")
+
+    for i in range(20):
+
+        frame = np.zeros(
+            (height, width, 3),
+            dtype=np.uint8
+        )
+
+        # Moving red circle
+        cv2.circle(
+            frame,
+            (50 + i * 10, 160),
+            40,
+            (0, 0, 255),
+            -1
+        )
+
+        # Blue rectangle
+        cv2.rectangle(
+            frame,
+            (200, 50),
+            (250, 100),
+            (255, 0, 0),
+            -1
+        )
+
+        out.write(frame)
+
+    out.release()
+
+    return filename
+
+
+# -------------------------------
+# Main Function
+# -------------------------------
+def main():
+
+    try:
+
+        video_path = generate_sample_video()
+
+        video_proc = VideoProcessor()
+
+        raw_frames = video_proc.load_video(video_path)
+
+        sampled = video_proc.sample_frames(raw_frames)
+
+        grid = video_proc.create_temporal_grid(sampled)
+
+        grid.save("debug_grid.jpg")
+
+        print("Grid saved as debug_grid.jpg")
+
+        print("\nGenerating caption...")
+
+        caption = generate_caption(grid)
+
+        print("\nGenerated Caption:", caption)
+
+    except Exception as e:
+
+        print("Error:", e)
+
+
+if __name__ == "__main__":
+    main()
