@@ -144,7 +144,7 @@ Video-Understanding-Using-BLIP/
 ### 1️⃣ Clone the Repository
 
 ```bash
-git clone YOUR_REPOSITORY_URL
+git clone https://github.com/Piyush-305/Video-Understanding-Using-BLIP
 ```
 
 ### 2️⃣ Navigate to the Project
@@ -182,7 +182,8 @@ The project produces the following outputs:
 | Output | Description |
 |---|---|
 | `sample_video.avi` | Generated synthetic sample video |
-| `debug_grid.jpg` | Combined image of four sampled frames |
+| `debug_grid.jpg` <img width="448" height="448" alt="debug_grid" src="https://github.com/user-attachments/assets/a10a89fc-d0cf-4529-95f1-07a8d5bcdf18" />
+| Combined image of four sampled frames |
 | Terminal Caption | AI-generated visual description |
 
 **Example caption (illustrative):**
